@@ -1,8 +1,8 @@
+package adders
+
 import chisel3._
 import chisel3.util._
 import chisel3.Driver
-
-package adders
 
 abstract class adder(width: Int, withOverFlow: Boolean) extends Module {
 	val io = IO(new Bundle{
