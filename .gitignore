@@ -1,0 +1,9 @@
+*.json
+*.fir
+*.v
+target/
+project/
+*.bsp
+*.idea
+*.metals
+*.bloop
