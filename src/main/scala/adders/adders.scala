@@ -4,6 +4,12 @@ import chisel3._
 import chisel3.util._
 import chisel3.Driver
 
+sealed trait add
+case class cla_add(width: Int, withOverFlow: Boolean) extends add
+case class ripple_add(width: Int, withOverFlow: Boolean) extends add
+case class pipelined_add_with_cla(stages: Int, width: Int, withOverFlow: Boolean) extends add
+//case class pipelined_adder_with_ripple(stages: Int, width: Int, withOverFlow: Boolean)
+
 abstract class Adder(width: Int, withOverFlow: Boolean) extends Module {
 	val io = IO(new Bundle{
 		val A = Input(UInt(width.W))
@@ -51,7 +57,7 @@ object Adder {
 	private class pipelined_adder(stages: Int, width: Int, withOverFlow: Boolean) extends Adder(width, withOverFlow) {
 	
 		val stageWidth = width/stages									//adder width for a single pipeline stage
-		val singleStageAdd = generateAdder(stageWidth, withOverFlow)_	//adder for the pipeline width
+		val singleStageAdd = generateAdder(cla_add(stageWidth, withOverFlow))_	//adder for the pipeline width
 		
 		val A = Seq.tabulate(stages-1)(i => Wire(UInt((width - stageWidth*(i+1)).W))).	//creating wires for adder input A
 				scan(RegNext(io.A))((prev: UInt, next: UInt) => {
@@ -88,16 +94,19 @@ object Adder {
 		addUnit.io.sum
 	}
 	
-	def generateAdder(width: Int, withOverFlow: Boolean)(A: UInt, B: UInt, Cin:UInt) = 
-		getSum( Module(new singleCycleAdder(width, withOverFlow) with cla) )(A, B, Cin)
-	
-	def generateAdder(stages: Int, width: Int, withOverFlow: Boolean)(A: UInt, B: UInt, Cin:UInt) = 
-		getSum( Module(new pipelined_adder(stages, width, withOverFlow)) )(A, B, Cin)
+	def generateAdder(addUnit: add)(A: UInt, B: UInt, Cin:UInt) = addUnit match {
+		case cla_add(width, withOverFlow) => 
+			getSum(Module(new singleCycleAdder(width, withOverFlow) with cla))(A, B, Cin)
+		case ripple_add(width, withOverFlow) =>
+			getSum(Module(new singleCycleAdder(width, withOverFlow) with ripple))(A, B, Cin)
+		case pipelined_add_with_cla(stages, width, withOverFlow) =>
+			getSum(Module(new pipelined_adder(stages, width, withOverFlow)))(A, B, Cin)
+		}
 
 }
 
 class generate_adder(width: Int, withOverFlow: Boolean) extends Adder(width, withOverFlow) {
-	io.sum := Adder.generateAdder(width, withOverFlow)(io.A, io.B, io.Cin)
+	io.sum := Adder.generateAdder(cla_add(width, withOverFlow))(io.A, io.B, io.Cin)
 }
 
 object generate_adder extends App {
