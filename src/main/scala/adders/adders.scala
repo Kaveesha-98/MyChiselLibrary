@@ -8,7 +8,7 @@ sealed trait add
 case class cla_add(width: Int, withOverFlow: Boolean) extends add
 case class ripple_add(width: Int, withOverFlow: Boolean) extends add
 case class pipelined_add_with_cla(stages: Int, width: Int, withOverFlow: Boolean) extends add
-//case class pipelined_adder_with_ripple(stages: Int, width: Int, withOverFlow: Boolean)
+case class pipelined_add_with_ripple(stages: Int, width: Int, withOverFlow: Boolean) extends add
 
 abstract class Adder(width: Int, withOverFlow: Boolean) extends Module {
 	val io = IO(new Bundle{
@@ -54,10 +54,11 @@ object Adder {
 	
 	}
 	
-	private class pipelined_adder(stages: Int, width: Int, withOverFlow: Boolean) extends Adder(width, withOverFlow) {
+	private abstract class pipelinedAdder(stages: Int, width: Int, val withOverFlow: Boolean) extends Adder(width, withOverFlow) {
 	
 		val stageWidth = width/stages									//adder width for a single pipeline stage
-		val singleStageAdd = generateAdder(cla_add(stageWidth, withOverFlow))_	//adder for the pipeline width
+		//val singleStageAdd = generateAdder(cla_add(stageWidth, withOverFlow))_	//adder for the pipeline width
+		def singleStageAdd: (UInt, UInt, UInt) => UInt
 		
 		val A = Seq.tabulate(stages-1)(i => Wire(UInt((width - stageWidth*(i+1)).W))).	//creating wires for adder input A
 				scan(RegNext(io.A))((prev: UInt, next: UInt) => {
@@ -87,6 +88,18 @@ object Adder {
 		
 	}
 	
+	private trait ClaStage extends pipelinedAdder{
+	
+		override def singleStageAdd = generateAdder(cla_add(stageWidth, withOverFlow))_
+	
+	}
+	
+	private trait RippleStage extends pipelinedAdder{
+	
+		override def singleStageAdd = generateAdder(ripple_add(stageWidth, withOverFlow))_	
+		
+	}
+	
 	private def getSum(addUnit: Adder)(A: UInt, B: UInt, Cin: UInt) = {
 		addUnit.io.A := A
 		addUnit.io.B := B
@@ -100,13 +113,15 @@ object Adder {
 		case ripple_add(width, withOverFlow) =>
 			getSum(Module(new singleCycleAdder(width, withOverFlow) with ripple))(A, B, Cin)
 		case pipelined_add_with_cla(stages, width, withOverFlow) =>
-			getSum(Module(new pipelined_adder(stages, width, withOverFlow)))(A, B, Cin)
+			getSum(Module(new pipelinedAdder(stages, width, withOverFlow) with ClaStage))(A, B, Cin)
+		case pipelined_add_with_ripple(stages, width, withOverFlow) =>
+			getSum(Module(new pipelinedAdder(stages, width, withOverFlow) with RippleStage))(A, B, Cin)
 		}
 
 }
 
 class generate_adder(width: Int, withOverFlow: Boolean) extends Adder(width, withOverFlow) {
-	io.sum := Adder.generateAdder(cla_add(width, withOverFlow))(io.A, io.B, io.Cin)
+	io.sum := Adder.generateAdder(pipelined_add_with_ripple(2, width, withOverFlow))(io.A, io.B, io.Cin)
 }
 
 object generate_adder extends App {
