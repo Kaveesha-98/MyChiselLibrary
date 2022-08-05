@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.Driver
 
-abstract class adder(width: Int, withOverFlow: Boolean) extends Module {
+abstract class Adder(width: Int, withOverFlow: Boolean) extends Module {
 	val io = IO(new Bundle{
 		val A = Input(UInt(width.W))
 		val B = Input(UInt(width.W))
@@ -13,12 +13,21 @@ abstract class adder(width: Int, withOverFlow: Boolean) extends Module {
 	})
 }
 
-object adder {
+object Adder {
 
-	private class cla_adder(width: Int, withOverFlow: Boolean) extends adder(width, withOverFlow) {
+	private abstract class singleCycleAdder(val width: Int, val withOverFlow: Boolean) extends Adder(width, withOverFlow) {
+	
 		val P = io.A ^ io.B
 		val G = io.A & io.B
 		
+		def C: UInt
+		
+		io.sum := C ^ P
+		
+	}
+	
+	private trait cla extends singleCycleAdder{
+	
 		def getPartialProduct(carry_index: Int)(product_index: Int) = 
 			if (carry_index == 0) io.Cin
 			else if (product_index == 0) (P(carry_index - 1, 0).andR & io.Cin)
@@ -28,12 +37,19 @@ object adder {
 		def partialProducts(carry_index: Int) = 
 			Seq.tabulate(carry_index + 1)(getPartialProduct(carry_index)_)
 
-		val C = Cat(Seq.tabulate(width+1)(i => partialProducts(i).reduce(_ | _)).reverse)
-			
-		io.sum := C | io.A | io.B
+		override def C = Cat(Seq.tabulate(width+1)(i => partialProducts(i).reduce(_ | _)).reverse)
+	
 	}
 	
-	private class pipelined_adder(stages: Int, width: Int, withOverFlow: Boolean) extends adder(width, withOverFlow) {
+	private trait ripple extends singleCycleAdder{
+		
+		override def C = Cat((Seq.tabulate(width)(P(_))).zip(Seq.tabulate(width)(G(_))).
+				scanLeft(io.Cin)((carryIn: UInt, PG: (UInt, UInt)) => PG._2 | (PG._1 & carryIn)).reverse)
+	
+	}
+	
+	private class pipelined_adder(stages: Int, width: Int, withOverFlow: Boolean) extends Adder(width, withOverFlow) {
+	
 		val stageWidth = width/stages									//adder width for a single pipeline stage
 		val singleStageAdd = generateAdder(stageWidth, withOverFlow)_	//adder for the pipeline width
 		
@@ -62,9 +78,10 @@ object adder {
 		val overflow = RegNext(adderResults(stages - 1)(stageWidth)) 
 		
 		io.sum := Cat(overflow, sum)
+		
 	}
 	
-	private def getSum(addUnit: adder)(A: UInt, B: UInt, Cin: UInt) = {
+	private def getSum(addUnit: Adder)(A: UInt, B: UInt, Cin: UInt) = {
 		addUnit.io.A := A
 		addUnit.io.B := B
 		addUnit.io.Cin := Cin
@@ -72,15 +89,15 @@ object adder {
 	}
 	
 	def generateAdder(width: Int, withOverFlow: Boolean)(A: UInt, B: UInt, Cin:UInt) = 
-		getSum( Module(new cla_adder(width, withOverFlow)) )(A, B, Cin)
+		getSum( Module(new singleCycleAdder(width, withOverFlow) with cla) )(A, B, Cin)
 	
 	def generateAdder(stages: Int, width: Int, withOverFlow: Boolean)(A: UInt, B: UInt, Cin:UInt) = 
 		getSum( Module(new pipelined_adder(stages, width, withOverFlow)) )(A, B, Cin)
 
 }
 
-class generate_adder(width: Int, withOverFlow: Boolean) extends adder(width, withOverFlow) {
-	io.sum := adder.generateAdder(width, withOverFlow)(io.A, io.B, io.Cin)
+class generate_adder(width: Int, withOverFlow: Boolean) extends Adder(width, withOverFlow) {
+	io.sum := Adder.generateAdder(width, withOverFlow)(io.A, io.B, io.Cin)
 }
 
 object generate_adder extends App {
