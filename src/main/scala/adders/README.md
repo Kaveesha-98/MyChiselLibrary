@@ -17,8 +17,8 @@ This code is written to generate 4 different types of adders.
 ```
 Module(new SingleCycleAdder(width, withOverFlow) with CarryLookAhead) // Carry-look-ahead single cycle adder
 Module(new SingleCycleAdder(width, withOverFlow) with Ripple)         // Ripple adder single cycle
-Module(new pipelinedAdder(stages, width, withOverFlow) with CarryLookAheadStage) // pipelined adder with carry look ahead add pipeline stages
-Module(new pipelinedAdder(stages, width, withOverFlow) with RippleStage)         // pipelined adder with ripple add pipeline stages
+Module(new PipelinedAdder(stages, width, withOverFlow) with CarryLookAheadStage) // pipelined adder with carry look ahead add pipeline stages
+Module(new PipelinedAdder(stages, width, withOverFlow) with RippleStage)         // pipelined adder with ripple add pipeline stages
 ```
 
 ## Calling a adder in a hardware module
