@@ -21,18 +21,19 @@ abstract class Adder(width: Int, withOverFlow: Boolean) extends Module {
 
 object Adder {
 
-	private abstract class singleCycleAdder(val width: Int, val withOverFlow: Boolean) extends Adder(width, withOverFlow) {
+	private abstract class SingleCycleAdder(val width: Int, val withOverFlow: Boolean) extends Adder(width, withOverFlow) {
 	
 		val P = io.A ^ io.B
 		val G = io.A & io.B
 		
+		//From ripple to carry-look-ahead only the way of calculating the carry changes
 		def C: UInt
 		
 		io.sum := C ^ P
 		
 	}
 	
-	private trait cla extends singleCycleAdder{
+	private trait CarryLookAhead extends SingleCycleAdder{
 	
 		def getPartialProduct(carry_index: Int)(product_index: Int) = 
 			if (carry_index == 0) io.Cin
@@ -47,7 +48,7 @@ object Adder {
 	
 	}
 	
-	private trait ripple extends singleCycleAdder{
+	private trait Ripple extends SingleCycleAdder{
 		
 		override def C = Cat((Seq.tabulate(width)(P(_))).zip(Seq.tabulate(width)(G(_))).
 				scanLeft(io.Cin)((carryIn: UInt, PG: (UInt, UInt)) => PG._2 | (PG._1 & carryIn)).reverse)
@@ -56,39 +57,47 @@ object Adder {
 	
 	private abstract class pipelinedAdder(stages: Int, width: Int, val withOverFlow: Boolean) extends Adder(width, withOverFlow) {
 	
-		val stageWidth = width/stages									//adder width for a single pipeline stage
-		//val singleStageAdd = generateAdder(cla_add(stageWidth, withOverFlow))_	//adder for the pipeline width
+		//addition width in each stage
+		val stageWidth = width/stages
+		//this will be the addition used for addition in the pipeline stage
 		def singleStageAdd: (UInt, UInt, UInt) => UInt
 		
-		val A = Seq.tabulate(stages-1)(i => Wire(UInt((width - stageWidth*(i+1)).W))).	//creating wires for adder input A
+		//source for addition will move on to the next pipeline stage until addition is finished
+		val A = Seq.tabulate(stages-1)(i => Wire(UInt((width - stageWidth*(i+1)).W))).
 				scan(RegNext(io.A))((prev: UInt, next: UInt) => {
-					next := RegNext(prev >> stageWidth)									//creating a delay for the adder inputs
+					next := RegNext(prev >> stageWidth)
 					next
 				})
 				
+		//source for addition will move on to the next pipeline stage until addition is finished
 		val B = Seq.tabulate(stages-1)(i => Wire(UInt((width - stageWidth*(i+1)).W))).
 				scan(RegNext(io.B))((prev: UInt, next: UInt) => {
 					next := RegNext(prev >> stageWidth)
 					next
 				})
 				
-		val Cin = Seq.fill(stages)(Wire(UInt(1.W)))//creating carry in wires
+		//wires to connect the overflow of addition in each stage
+		val Cin = Seq.fill(stages)(Wire(UInt(1.W)))
 		
-		val adderResults = Seq.tabulate(stages)(i => singleStageAdd(A(i), B(i), Cin(i)))//connecting inputs to adder
+		//adder results in each stage
+		val adderResults = Seq.tabulate(stages)(i => singleStageAdd(A(i), B(i), Cin(i)))
 		
+		//connecting the carry-outs to carry-ins in the next stage
 		Cin.zip(io.Cin +: adderResults.map(_(stageWidth))).
-		foreach{case(carryIn: UInt, carryRes: UInt) => carryIn := RegNext(carryRes)}//connecting carry-outs to carry-ins
+		foreach{case(carryIn: UInt, carryRes: UInt) => carryIn := RegNext(carryRes)}
 		
+		//getting the answer, result from each stage is delayed(different for each stage) to get final answer
 		val sum = Cat((0 until stages).map(i => stages - i).zip(adderResults.map(_(stageWidth - 1, 0))).
-					map{case(delay, result) => ShiftRegister(result, delay)}.reverse)//getting the final result
+					map{case(delay, result) => ShiftRegister(result, delay)}.reverse)
 		
+		//overflow bit from the last stage
 		val overflow = RegNext(adderResults(stages - 1)(stageWidth)) 
 		
 		io.sum := Cat(overflow, sum)
 		
 	}
 	
-	private trait ClaStage extends pipelinedAdder{
+	private trait CarryLookAheadStage extends pipelinedAdder{
 	
 		override def singleStageAdd = generateAdder(cla_add(stageWidth, withOverFlow))_
 	
@@ -109,11 +118,11 @@ object Adder {
 	
 	def generateAdder(addUnit: add)(A: UInt, B: UInt, Cin:UInt) = addUnit match {
 		case cla_add(width, withOverFlow) => 
-			getSum(Module(new singleCycleAdder(width, withOverFlow) with cla))(A, B, Cin)
+			getSum(Module(new SingleCycleAdder(width, withOverFlow) with CarryLookAhead))(A, B, Cin)
 		case ripple_add(width, withOverFlow) =>
-			getSum(Module(new singleCycleAdder(width, withOverFlow) with ripple))(A, B, Cin)
+			getSum(Module(new SingleCycleAdder(width, withOverFlow) with Ripple))(A, B, Cin)
 		case pipelined_add_with_cla(stages, width, withOverFlow) =>
-			getSum(Module(new pipelinedAdder(stages, width, withOverFlow) with ClaStage))(A, B, Cin)
+			getSum(Module(new pipelinedAdder(stages, width, withOverFlow) with CarryLookAheadStage))(A, B, Cin)
 		case pipelined_add_with_ripple(stages, width, withOverFlow) =>
 			getSum(Module(new pipelinedAdder(stages, width, withOverFlow) with RippleStage))(A, B, Cin)
 		}
