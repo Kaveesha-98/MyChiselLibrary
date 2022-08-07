@@ -55,7 +55,7 @@ object Adder {
 	
 	}
 	
-	private abstract class pipelinedAdder(stages: Int, width: Int, val withOverFlow: Boolean) extends Adder(width, withOverFlow) {
+	private abstract class PipelinedAdder(stages: Int, width: Int, val withOverFlow: Boolean) extends Adder(width, withOverFlow) {
 	
 		//addition width in each stage
 		val stageWidth = width/stages
@@ -97,13 +97,13 @@ object Adder {
 		
 	}
 	
-	private trait CarryLookAheadStage extends pipelinedAdder{
+	private trait CarryLookAheadStage extends PipelinedAdder{
 	
 		override def singleStageAdd = generateAdder(cla_add(stageWidth, withOverFlow))_
 	
 	}
 	
-	private trait RippleStage extends pipelinedAdder{
+	private trait RippleStage extends PipelinedAdder{
 	
 		override def singleStageAdd = generateAdder(ripple_add(stageWidth, withOverFlow))_	
 		
@@ -122,9 +122,9 @@ object Adder {
 		case ripple_add(width, withOverFlow) =>
 			getSum(Module(new SingleCycleAdder(width, withOverFlow) with Ripple))(A, B, Cin)
 		case pipelined_add_with_cla(stages, width, withOverFlow) =>
-			getSum(Module(new pipelinedAdder(stages, width, withOverFlow) with CarryLookAheadStage))(A, B, Cin)
+			getSum(Module(new PipelinedAdder(stages, width, withOverFlow) with CarryLookAheadStage))(A, B, Cin)
 		case pipelined_add_with_ripple(stages, width, withOverFlow) =>
-			getSum(Module(new pipelinedAdder(stages, width, withOverFlow) with RippleStage))(A, B, Cin)
+			getSum(Module(new PipelinedAdder(stages, width, withOverFlow) with RippleStage))(A, B, Cin)
 		}
 
 }
