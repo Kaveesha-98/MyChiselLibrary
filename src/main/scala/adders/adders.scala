@@ -2,7 +2,6 @@ package adders
 
 import chisel3._
 import chisel3.util._
-import chisel3.Driver
 
 sealed trait add
 case class cla_add(width: Int, withOverFlow: Boolean) extends add
@@ -15,7 +14,7 @@ abstract class Adder(width: Int, withOverFlow: Boolean) extends Module {
 		val A = Input(UInt(width.W))
 		val B = Input(UInt(width.W))
 		val Cin = Input(UInt(1.W))
-		val sum = Output(UInt((if (withOverFlow) (width+1) else width).W))
+		val sum = Output(UInt((if (withOverFlow) width+1 else width).W))
 	})
 }
 
@@ -37,12 +36,12 @@ object Adder {
 	
 		def getPartialProduct(carry_index: Int)(product_index: Int) = 
 			if (carry_index == 0) io.Cin
-			else if (product_index == 0) (P(carry_index - 1, 0).andR & io.Cin)
+			else if (product_index == 0) P(carry_index - 1, 0).andR & io.Cin
 			else if (product_index == carry_index) G(carry_index - 1)
-			else (P(carry_index - 1, product_index).andR & G(product_index - 1))
+			else P(carry_index - 1, product_index).andR & G(product_index - 1)
 				
 		def partialProducts(carry_index: Int) = 
-			Seq.tabulate(carry_index + 1)(getPartialProduct(carry_index)_)
+			Seq.tabulate(carry_index + 1)(getPartialProduct(carry_index))
 
 		override def C = Cat(Seq.tabulate(width+1)(i => partialProducts(i).reduce(_ | _)).reverse)
 	
@@ -50,7 +49,7 @@ object Adder {
 	
 	private trait Ripple extends SingleCycleAdder{
 		
-		override def C = Cat((Seq.tabulate(width)(P(_))).zip(Seq.tabulate(width)(G(_))).
+		override def C = Cat(Seq.tabulate(width)(P(_)).zip(Seq.tabulate(width)(G(_))).
 				scanLeft(io.Cin)((carryIn: UInt, PG: (UInt, UInt)) => PG._2 | (PG._1 & carryIn)).reverse)
 	
 	}
@@ -99,13 +98,13 @@ object Adder {
 	
 	private trait CarryLookAheadStage extends PipelinedAdder{
 	
-		override def singleStageAdd = generateAdder(cla_add(stageWidth, withOverFlow))_
+		override def singleStageAdd = generateAdder(cla_add(stageWidth, withOverFlow))
 	
 	}
 	
 	private trait RippleStage extends PipelinedAdder{
 	
-		override def singleStageAdd = generateAdder(ripple_add(stageWidth, withOverFlow))_	
+		override def singleStageAdd = generateAdder(ripple_add(stageWidth, withOverFlow))
 		
 	}
 	
