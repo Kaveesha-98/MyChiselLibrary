@@ -38,7 +38,12 @@ case class pipelined_add_with_ripple(stages: Int, width: Int, withOverFlow: Bool
 ### sources
 Defines the sources for addition
 
-### usage example(A pipelined adder with carry-look-ahead adders in pipeline stages, 4 pipelined stages, 32 bit wide and with overflow)
+## usage example
+A pipelined adder with carry-look-ahead adders in pipeline stages, 4 pipelined stages, 32 bit wide and with overflow
 ```
 val result = Adder.generateAdder(pipelined_add_with_ripple(4, 32, true))(A, B, carryBit)
+```
+A single cycle adder with carry-look-ahead 32 bit wide and without overflow
+```
+val result = Adder.generateAdder(cla_add(32, false))(A, B, carryBit)
 ```
